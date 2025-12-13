@@ -3,7 +3,7 @@ import { authMiddleware } from '../../core/middleware/authMiddleware';
 
 const router = Router();
 // Import Controllers
-const auctionsController = require('../controllers/auctionController');
+const auctionsController = require('./auctions.controller');
 
 // --- AUCTION ROUTES ---
 

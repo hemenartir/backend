@@ -3,7 +3,7 @@ import { authMiddleware } from '../../core/middleware/authMiddleware';
 
 
 const router = Router();
-const bidsController = require('../controllers/bidController');
+const bidsController = require('./bids.controller');
 
 router.post('/bids', authMiddleware, bidsController.placeBid);
 

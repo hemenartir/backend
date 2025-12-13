@@ -4,6 +4,7 @@ import userRoutes from './user/user.routes';
 import auctionsRoutes from './auctions/auctions.routes';
 import bidsRoutes from './bids/bids.routes';
 import uploadRoutes from './upload/upload.routes';
+import watchlistRoutes from './watchlist/watchlist.routes';
 
 // Buraya items ve bids rotaları da gelecek
 // import itemRoutes from './items/items.routes';
@@ -20,10 +21,12 @@ router.use('/users', userRoutes); // YENİ ROTA
 router.use('/auctions', auctionsRoutes);
 
 // /api/v1/bids
-router.use('bids', bidsRoutes);
+router.use('/bids', bidsRoutes);
 
-router.use('upload', uploadRoutes)
+// /api/v1/upload
+router.use('/upload', uploadRoutes)
 
-// /api/v1/uploads
+// /api/v1/watchlist
+router.use('/watchlist', watchlistRoutes)
 
 export default router;
