@@ -24,7 +24,7 @@ app.get('/', (req: Request, res: Response) => {
 app.use('/api/v1', apiRoutes);
 
 
-// Ornek: Redis Test (Bunu silebilir veya bırakabilirsiniz)
+// Ornek: Redis Test (Bunu silebilir veya bırakabilirsiniz) asdasd
 app.get('/redis-test', async (req: Request, res: Response) => {
   try {
     await redisClient.set('test_key', 'Merhaba Redis!');
