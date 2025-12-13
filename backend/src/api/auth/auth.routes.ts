@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { registerUser, loginUser } from './auth.controller';
+import { registerUser, loginUser, loginWithGoogleMobile } from './auth.controller';
 import { validate } from '../../core/middleware/validate'; // Henüz oluşturmadık, şimdi oluşturacağız
 import { registerSchema, loginSchema } from './auth.validation';
 import passport from 'passport'; // EKLE
@@ -15,6 +15,8 @@ router.post('/register', validate(registerSchema), registerUser);
 // POST /api/v1/auth/login
 router.post('/login', validate(loginSchema), loginUser);
 
+// POST /api/v1/auth/google
+router.post('/google', loginWithGoogleMobile);
 
 /**
  * @desc 1. Adım: Kullanıcıyı Google'a Yönlendirme

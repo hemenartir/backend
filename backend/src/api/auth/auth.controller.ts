@@ -3,10 +3,13 @@ import { prisma } from '../../prismaClient'; // Burayı değiştirdik
 import { AccountStatus } from '../../generated/prisma';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
+
 
 // Prisma'yı bir kez burada başlatıp controller içinde kullanabiliriz
 //const prisma = new PrismaClient();
 // JWT için gizli anahtar (Bunu .env'ye taşımalısın!)
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'gizli-anahtar';
 
 export const registerUser = async (req: Request, res: Response) => {
@@ -78,5 +81,109 @@ export const loginUser = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+};
+
+export const loginWithGoogleMobile = async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ message: "Token is required" });
+    }
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+      
+      if (!googleClientId) {
+          throw new Error("GOOGLE_CLIENT_ID is not defined in .env");
+      }
+    // 1. Verify the Google Token
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      // IMPORTANT: This must be your WEB Client ID (from Google Console)
+      // The mobile app generates the token FOR the web client.
+      audience: googleClientId, 
+    });
+
+    const payload = ticket.getPayload();
+
+    if (!payload || !payload.email) {
+      return res.status(400).json({ message: "Invalid Google Token" });
+    }
+
+    const { email, sub: googleId } = payload;
+
+    // --- REUSED PRISMA LOGIC START ---
+    
+    // 2. Try to find user by Google ID
+    let user = await prisma.user.findUnique({
+      where: { googleId: googleId },
+    });
+
+    // 3. If not found, try by Email
+    if (!user) {
+      user = await prisma.user.findUnique({ where: { email } });
+
+      if (user) {
+        // Link account
+        user = await prisma.user.update({
+          where: { email: email },
+          data: { googleId: googleId },
+        });
+      } else {
+        // 4. Create New User
+        let baseUsername = email.split('@')[0];
+        if (!baseUsername || baseUsername.length < 3) {
+           baseUsername = `user_${googleId.substring(0, 8)}`;
+        }
+        baseUsername = baseUsername.replace(/[^a-zA-Z0-9_]/g, '');
+
+        let finalUsername = baseUsername;
+        let userCreated = false;
+
+        while (!userCreated) {
+          try {
+            user = await prisma.user.create({
+              data: {
+                email: email,
+                username: finalUsername,
+                googleId: googleId,
+                status: 'Active', 
+              },
+            });
+            userCreated = true;
+          } catch (e: any) {
+            if (e.code === 'P2002' && e.meta?.target.includes('username')) {
+              finalUsername = baseUsername + '_' + Math.floor(Math.random() * 1000);
+            } else {
+              throw e;
+            }
+          }
+        }
+      }
+    }
+    // --- REUSED PRISMA LOGIC END ---
+
+    // 5. Generate JWT for your App
+    const appToken = jwt.sign(
+      { userId: user!.id, email: user!.email },
+      JWT_SECRET,
+      { expiresIn: '7d' } // Long lived token for mobile
+    );
+
+    // 6. Return JSON (No redirects!)
+    return res.status(200).json({
+      message: "Login successful",
+      token: appToken,
+      user: {
+        id: user!.id,
+        email: user!.email,
+        username: user!.username,
+        verified: true // Google users are always email verified
+      }
+    });
+
+  } catch (error) {
+    console.error("Mobile Google Auth Error:", error);
+    return res.status(401).json({ message: "Authentication failed", error: error });
   }
 };
