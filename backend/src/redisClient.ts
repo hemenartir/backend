@@ -18,3 +18,5 @@ redisClient.on('error', (err) => console.log('Redis Client Error', err));
 // .connect() fonksiyonunu burada ÇAĞIRMIYORUZ.
 // Bağlantı, uygulamanın ana giriş noktası olan index.ts'te yapılmalı.
 // Bu dosya sadece istemciyi "hazırlar".
+
+//test
