@@ -9,6 +9,7 @@ services:
     volumes:
       # Gelistirme icin kod degisikliklerinin aninda yansimasi
       # (node_modules haric)
+      - ./uploads:/app/uploads
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
     env_file:

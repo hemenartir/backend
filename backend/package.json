@@ -14,21 +14,27 @@
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^6.17.1",
+    "@socket.io/redis-adapter": "^8.3.0",
     "express": "^5.1.0",
     "google-auth-library": "^10.5.0",
+    "multer": "^2.0.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.16.3",
-    "redis": "^5.8.3"
+    "redis": "^5.8.3",
+    "socket.io": "^4.8.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
     "@types/node": "^24.8.1",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/pg": "^8.15.5",
+    "@types/uuid": "^10.0.0",
     "bcrypt": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
     "nodemon": "^3.1.10",
