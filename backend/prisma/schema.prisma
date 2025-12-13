@@ -1,0 +1,301 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+// =========================================================
+// 1. KULLANICILAR VE GÜVENLİK
+// =========================================================
+
+enum AccountStatus {
+  Deactivated
+  Active
+}
+
+model User {
+  // Temel Alanlar
+  id             Int       @id @default(autoincrement())
+  username       String    @unique @db.VarChar(50)
+  email          String    @unique @db.VarChar(100)
+  passwordHash   String?    @db.Char(60) // Bcrypt hash'leri için ideal
+  registrationDate DateTime @default(now())
+  role           String    @default("Bider") // 'Bider', 'Seller', 'Admin'
+
+  // OAuth Provider ID'leri
+  googleId  String? @unique
+  appleId   String? @unique
+
+  // İlişkiler (Bu kullanıcının sattığı, teklif verdiği, vb.)
+  // Seller: Bu kullanıcının sattığı ürünler
+  sellingItems   Item[]    @relation("SellerItems")
+  // HighBidder: Bu kullanıcının en yüksek teklifi verdiği ürünler (CurrentPrice)
+  highBidOnItems Item[]    @relation("HighBidderItems")
+  // Buyer: Bu kullanıcının satın aldığı ürünler (Ödeme tablosu üzerinden)
+  paymentsMade   Payment[] @relation("BuyerPayments")
+  // Receiver: Bu kullanıcının aldığı ödemeler (Satıcı olarak)
+  paymentsReceived Payment[] @relation("SellerPayments")
+  // Bids: Bu kullanıcının verdiği tüm teklifler
+  bids           Bid[]
+  // Watchlist: İzleme listesindeki ürünler
+  watchlistItems Watchlist[]
+  // Addresses: Kayıtlı adresleri
+  addresses      UserAddress[]
+  // Notifications: Aldığı bildirimler
+  notifications  Notification[]
+  // Reviews: Yaptığı incelemeler
+  reviews        Review[]
+  // AuditLogs: Yaptığı kritik işlemler
+  auditLogs      AuditLog[]
+
+  status AccountStatus @default(Active) // 'Active', 'Deactivated'
+  @@index([status])
+  // Engellenmiş kullanıcılar (Blacklist) için de ilişkiler eklenebilir.
+}
+
+// =========================================================
+// 2. KATEGORİLER (PATH ENUMERATION)
+// =========================================================
+
+model Category {
+  id              Int       @id @default(autoincrement())
+  categoryName    String    @db.VarChar(100)
+  // ParentID: Komşuluk listesi için (Adjacency List)
+  parentId        Int?
+  // Path: Path Enumeration için (Örn: /1/5/12/)
+  path            String    @db.VarChar(500)
+  
+  // İlişkiler
+  items           Item[]
+  parent          Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children        Category[] @relation("CategoryHierarchy")
+
+  // ParentID alanı için dizin (index) ekleyelim.
+  @@index([parentId])
+  // Path alanı için arama performansını artıracak dizin ekleyelim.
+  @@index([path]) // MySQL'de text/varchar limitini aşmamak için prefix index
+}
+
+// =========================================================
+// 3. ÜRÜNLER (AÇIK ARTIRMALAR)
+// =========================================================
+
+
+// TODO Bunu User.role, Payment.status, Shipping.deliveryStatus ve Notification.type 
+// için de yapmanızı şiddetle tavsiye ederim.
+enum ItemStatus {
+  Active
+  Ended
+  Sold
+  Cancelled
+}
+
+model Item {
+  id              Int       @id @default(autoincrement())
+  title           String    @db.VarChar(255)
+  description     String?   @db.Text
+  startingPrice   Decimal   @db.Decimal(10, 2)
+  currentPrice    Decimal   @db.Decimal(10, 2)
+  startTime       DateTime
+  endTime         DateTime
+  status          ItemStatus    @default(Active) // 'Active', 'Ended', 'Sold', 'Cancelled'
+
+  // İlişkiler
+  // Satıcı (Seller)
+  sellerId        Int
+  seller          User      @relation("SellerItems", fields: [sellerId], references: [id])
+  // Kategori
+  categoryId      Int
+  category        Category  @relation(fields: [categoryId], references: [id])
+  // En Yüksek Teklif Veren (High Bidder)
+  highBidderId    Int?
+  highBidder      User?     @relation("HighBidderItems", fields: [highBidderId], references: [id])
+  
+  // Ters İlişkiler
+  bids            Bid[]
+  assets          ItemAsset[]
+  watchlistUsers  Watchlist[]
+  reviews         Review[]
+  payment         Payment? // Bire-Bir veya Bire-Sıfır/Bir
+  shipping        Shipping?
+  notifications   Notification[]
+  
+  // Süresi dolan ürünleri hızlı bulmak için dizin
+  @@index([endTime])
+}
+
+// =========================================================
+// 4. TEKLİFLER
+// =========================================================
+
+model Bid {
+  id              BigInt    @id @default(autoincrement())
+  bidAmount       Decimal   @db.Decimal(10, 2)
+  bidTime         DateTime  @default(now())
+  
+  // İlişkiler
+  itemId          Int
+  item            Item      @relation(fields: [itemId], references: [id])
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // En çok sorgulanan ve sıralanan alanlar için dizinler
+  @@index([itemId])
+  @@index([userId])
+  @@index([itemId, bidAmount]) // Teklif geçmişini sorgulamak için kompozit dizin
+}
+
+// =========================================================
+// 5. EK YARDIMCI TABLOLAR (Normalizasyon İçin)
+// =========================================================
+
+// Ürün Varlıkları (Resimler, Videolar vb.)
+model ItemAsset {
+  id              Int       @id @default(autoincrement())
+  itemId          Int
+  item            Item      @relation(fields: [itemId], references: [id])
+  assetURL        String    @db.VarChar(500)
+  assetType       String    @default("Image") // 'Image', 'Video'
+  orderIndex      Int       @default(0) // Sıralama için
+  
+  @@index([itemId])
+}
+
+// İzleme Listesi (Çoka-Çok İlişki Tablosu)
+model Watchlist {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  itemId          Int
+  item            Item      @relation(fields: [itemId], references: [id])
+  addedAt         DateTime  @default(now())
+
+  // Bir kullanıcının bir ürünü sadece bir kez izlemesi için kompozit anahtar/unique
+  @@unique([userId, itemId])
+}
+
+// İncelemeler
+model Review {
+  id              Int       @id @default(autoincrement())
+  itemId          Int
+  item            Item      @relation(fields: [itemId], references: [id])
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  rating          Int       @db.SmallInt // 1-5 yıldız için
+  comment         String?   @db.Text
+  reviewDate      DateTime  @default(now())
+  
+  // Bir kullanıcının bir ürüne tek bir inceleme yapması için
+  @@unique([itemId, userId])
+}
+
+// Kullanıcı Adresleri
+model UserAddress {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  recipientName   String    @db.VarChar(100)
+  addressLine1    String    @db.VarChar(255)
+  addressLine2    String?   @db.VarChar(255)
+  city            String    @db.VarChar(50)
+  state           String?   @db.VarChar(50)
+  zipCode         String    @db.VarChar(20)
+  country         String    @db.VarChar(50)
+  isDefault       Boolean   @default(false)
+  
+  // İlişkiler
+  shippings       Shipping[]
+}
+
+// =========================================================
+// 6. ÖDEME VE KARGO
+// =========================================================
+
+model Payment {
+  id              BigInt    @id @default(autoincrement())
+  // İlişkiler
+  itemId          Int       @unique // Bir ürünün sadece bir ödemesi olabilir (Bire-Bir)
+  item            Item      @relation(fields: [itemId], references: [id])
+  buyerId         Int
+  buyer           User      @relation("BuyerPayments", fields: [buyerId], references: [id])
+  sellerId        Int
+  seller          User      @relation("SellerPayments", fields: [sellerId], references: [id])
+
+  // Finansal Bilgiler
+  amount          Decimal   @db.Decimal(10, 2)
+  paymentDate     DateTime  @default(now())
+  paymentMethod   String    @db.VarChar(50)
+  transactionId   String    @unique @db.VarChar(255) // Ödeme sağlayıcı kimliği
+  status          String    @db.VarChar(30) // 'Completed', 'Failed', 'Refunded'
+  processingFee   Decimal?  @db.Decimal(10, 2)
+  appCommission   Decimal?  @db.Decimal(10, 2)
+  
+  // Ödeme ve Kargo arasında bire-bir ilişki
+  shipping        Shipping?
+}
+
+model Shipping {
+  id              Int       @id @default(autoincrement())
+  itemId          Int       @unique // Bir ürüne ait tek kargo kaydı
+  item            Item      @relation(fields: [itemId], references: [id])
+  
+  // Kargo ve Ödeme
+  paymentId       BigInt?   @unique // Bire-Bir (Opsiyonel: Kargo ödemeden bağımsız da başlayabilir)
+  payment         Payment?  @relation(fields: [paymentId], references: [id])
+
+  // Adres Bilgisi
+  addressId       Int
+  address         UserAddress @relation(fields: [addressId], references: [id])
+
+  // Lojistik Bilgiler
+  trackingNumber  String?   @unique @db.VarChar(100)
+  carrier         String?   @db.VarChar(50)
+  shippingDate    DateTime?
+  deliveryStatus  String    @default("Pending") // 'Pending', 'InTransit', 'Delivered'
+}
+
+
+// =========================================================
+// 7. DİĞER KÜÇÜK TABLOLAR
+// =========================================================
+
+// Bildirimler
+model Notification {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  itemId          Int?
+  item            Item?     @relation(fields: [itemId], references: [id])
+  type            String    @db.VarChar(50) // 'Outbid', 'AuctionWon'
+  message         String    @db.VarChar(255)
+  isRead          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, isRead])
+}
+
+// Denetim Kayıtları
+model AuditLog {
+  id              BigInt    @id @default(autoincrement())
+  userId          Int?
+  user            User?     @relation(fields: [userId], references: [id])
+  action          String    @db.VarChar(100)
+  tableName       String    @db.VarChar(50)
+  recordId        Int?
+  timestamp       DateTime  @default(now())
+  ipAddress       String?   @db.VarChar(45) // IPv6 için yeterli alan
+  
+  @@index([userId])
+  @@index([timestamp])
+}

@@ -1,0 +1,47 @@
+services:
+  # 1. Backend API Servisi (Node.js, Express, Prisma)
+  api:
+    build:
+      context: ./backend  # ./backend klasorundeki Dockerfile'ı kullan
+    container_name: backend_api
+    ports:
+      - "3000:3000"      # Lokal port 3000'i container'in 3000'ine bagla
+    volumes:
+      # Gelistirme icin kod degisikliklerinin aninda yansimasi
+      # (node_modules haric)
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+    env_file:
+      - ./backend/.env   # .env dosyasindaki degiskenleri iceri al
+    depends_on:
+      - db               # Baslamadan once db'nin baslamasini bekle
+      - cache            # Baslamadan once cache'in baslamasini bekle
+    restart: unless-stopped
+
+  # 2. PostgreSQL Veritabani Servisi
+  db:
+    image: postgres:17  # Alpine olmayan, stabil bir PostgreSQL surumu
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}      # Bu degiskenler backend/.env'den gelecek
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Verilerin kalici olmasi icin volume
+    ports:
+      - "5432:5432"      # Veritabanina disaridan erismek isterseniz (opsiyonel)
+    restart: unless-stopped
+
+  # 3. Redis Cache Servisi
+  cache:
+    image: redis:8      # Alpine olmayan, stabil bir Redis surumu
+    container_name: redis_cache
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"      # Redis'e disaridan erismek isterseniz (opsiyonel)
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
