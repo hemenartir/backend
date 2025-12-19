@@ -8,10 +8,14 @@ interface AuthRequest extends Request {
   user?: { id: number }; // Populated by authMiddleware
 }
 
-export const placeBid = async (req: AuthRequest, res: Response) => {
+export const placeBid = async (req: Request, res: Response) => {
   // 1. Get Data
   const { itemId, amount } = req.body;
-  const userId = req.user?.id; // <--- THIS IS HOW WE KNOW THE USER
+  const user = (req as AuthRequest).user;
+  if(!user){
+      return res.status(401).json({ message: 'User not authenticated' });
+  }
+  const userId = user.id; // <--- THIS IS HOW WE KNOW THE USER
 
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 

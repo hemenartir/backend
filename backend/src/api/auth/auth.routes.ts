@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { registerUser, loginUser, loginWithGoogleMobile } from './auth.controller';
+import { registerUser, loginUser, loginWithGoogleMobile, getMe } from './auth.controller';
 import { validate } from '../../core/middleware/validate'; // Henüz oluşturmadık, şimdi oluşturacağız
 import { registerSchema, loginSchema } from './auth.validation';
+import { authMiddleware } from '../../core/middleware/authMiddleware';
 import passport from 'passport'; // EKLE
 import jwt from 'jsonwebtoken'; // EKLE
 
@@ -18,6 +19,8 @@ router.post('/login', validate(loginSchema), loginUser);
 // POST /api/v1/auth/google
 router.post('/google', loginWithGoogleMobile);
 
+// GET /api/v1/auth/me
+router.get('/me', authMiddleware, getMe);
 /**
  * @desc 1. Adım: Kullanıcıyı Google'a Yönlendirme
  * Kullanıcı (Next.js sitenizden) bu linke tıklar:

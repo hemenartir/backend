@@ -1,14 +1,22 @@
 import { Request, Response } from 'express';
 
-export const uploadImage = (req: Request, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
+export const uploadImages = (req: Request, res: Response) => {
+  // Multer puts files in req.files when using .array()
+  const files = req.files as Express.Multer.File[];
+
+  if (!files || files.length === 0) {
+    return res.status(400).json({ error: "No files uploaded" });
   }
 
-  // Construct the public URL
-  // NOTE: Android Emulator cannot see 'localhost'. Use your machine's IP.
-  const baseUrl = process.env.API_BASE_URL || 'http://0.0.0.0:3000';
-  const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
+  const protocol = req.protocol; 
+  const host = req.get('host'); 
+  const baseUrl = `${protocol}://${host}`;
 
-  res.json({ url: fileUrl });
+  // Map over all files and create URLs for them
+  const fileUrls = files.map(file => {
+    return `${baseUrl}/uploads/${file.filename}`;
+  });
+
+  // Return the array of URLs
+  res.json({ urls: fileUrls });
 };

@@ -9,16 +9,19 @@ services:
     volumes:
       # Gelistirme icin kod degisikliklerinin aninda yansimasi
       # (node_modules haric)
-      - ./uploads:/app/uploads
       - ./backend:/usr/src/app
+      - ./backend/prisma:/usr/src/app/prisma
       - /usr/src/app/node_modules
+      - ./uploads:/app/uploads
+      
     env_file:
       - ./backend/.env   # .env dosyasindaki degiskenleri iceri al
     depends_on:
       - db               # Baslamadan once db'nin baslamasini bekle
       - cache            # Baslamadan once cache'in baslamasini bekle
     restart: unless-stopped
-
+  #env_file:
+  #  - ./backend/.env
   # 2. PostgreSQL Veritabani Servisi
   db:
     image: postgres:17  # Alpine olmayan, stabil bir PostgreSQL surumu

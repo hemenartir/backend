@@ -71,12 +71,12 @@ export const loginUser = async (req: Request, res: Response) => {
 
     // 3. JWT Token oluştur
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { id: user.id, email: user.email },
       JWT_SECRET,
       { expiresIn: '1h' } // Token 1 saat geçerli
     );
 
-    res.status(200).json({ token });
+    res.status(200).json({ "token": token, "user": {"id": user.id, "email": user.email} });
 
   } catch (error) {
     console.error(error);
@@ -165,7 +165,7 @@ export const loginWithGoogleMobile = async (req: Request, res: Response) => {
 
     // 5. Generate JWT for your App
     const appToken = jwt.sign(
-      { userId: user!.id, email: user!.email },
+      { id: user!.id, email: user!.email },
       JWT_SECRET,
       { expiresIn: '7d' } // Long lived token for mobile
     );
@@ -186,4 +186,22 @@ export const loginWithGoogleMobile = async (req: Request, res: Response) => {
     console.error("Mobile Google Auth Error:", error);
     return res.status(401).json({ message: "Authentication failed", error: error });
   }
+};
+
+export const getMe = (req: Request, res: Response) => {
+  // authMiddleware zaten kullanıcıyı bulup req.user içine koydu
+  // Typescript hatası almamak için 'as any' kullanıyoruz veya interface extend edilebilir
+  const user = (req as any).user;
+
+  if (!user) {
+    return res.status(401).json({ error: "Oturum bulunamadı." });
+  }
+
+  // Güvenlik: Password hash'i ve hassas ID'leri client'a gönderme
+  const { passwordHash, googleId, appleId, ...safeUser } = user;
+
+  res.json({ 
+    message: "Oturum geçerli", 
+    user: safeUser 
+  });
 };

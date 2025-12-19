@@ -12,10 +12,13 @@ COPY package*.json ./
 
 COPY prisma/schema.prisma ./prisma/
 
-RUN npm install
-
 # Tum proje dosyalarini kopyala
 COPY . .
+
+
+RUN npm install
+
+
 
 # Prisma Client'i olustur
 RUN npx prisma generate

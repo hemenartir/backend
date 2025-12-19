@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../core/middleware/authMiddleware';
-
+import {placeBid} from './bids.controller'
 
 const router = Router();
-const bidsController = require('./bids.controller');
 
-router.post('/bids', authMiddleware, bidsController.placeBid);
+router.post('/bids', authMiddleware, placeBid);
 
 export default router;

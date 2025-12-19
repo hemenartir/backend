@@ -1,16 +1,20 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../core/middleware/authMiddleware';
+// FIX 1: Use named imports directly. It's safer and gives you autocomplete.
+import { createItem, getItemDetail, getFeed } from './auctions.controller';
 
 const router = Router();
-// Import Controllers
-const auctionsController = require('./auctions.controller');
 
 // --- AUCTION ROUTES ---
 
-router.get('/auctions', auctionsController.getFeed);
-router.post('/auctions', authMiddleware, auctionsController.createAuction);
+ router.get('/feed', getFeed);
+// router.post('/auctions', authMiddleware, createAuction); 
 
-router.post('/createItem', authMiddleware, auctionsController.createItem);
-router.get('/items/:id', auctionsController.getItemDetail);
-router.post('/items', authMiddleware, auctionsController.createItem);
+// ✅ These exist, so we use them directly.
+router.post('/createItem', authMiddleware, createItem);
+router.get('/items/:id', getItemDetail);
+
+// This seems like a duplicate of '/createItem', keeping it if you want RESTful naming
+router.post('/items', authMiddleware, createItem); 
+
 export default router;
