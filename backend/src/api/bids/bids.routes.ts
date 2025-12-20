@@ -4,6 +4,6 @@ import {placeBid} from './bids.controller'
 
 const router = Router();
 
-router.post('/bids', authMiddleware, placeBid);
+router.post('/', authMiddleware, placeBid);
 
 export default router;

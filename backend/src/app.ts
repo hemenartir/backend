@@ -1,33 +1,62 @@
 import express, { Request, Response } from 'express';
-import { redisClient } from './redisClient'; // Redis'i ayrı bir dosyaya alabiliriz
-import apiRoutes from './api/routes'; // Ana API rotamızı import ediyoruz
-import passport from 'passport'; // EKLE
-import './core/config/google.strategy'; // EKLE (Stratejimizin çalışması için)
+import { redisClient } from './redisClient'; 
+import apiRoutes from './api/routes'; 
+import passport from 'passport'; 
+import './core/config/google.strategy'; 
 import path from 'path';
-// --- KURUMLAR ---
-const app = express();
-app.use(express.json()); // JSON body parser
-app.use(passport.initialize());
-app.use('/uploads', express.static(path.join(__dirname, './uploads')));
+import fs from 'fs';
 
-// Redis'i app.ts'den ayırmak iyi bir fikir olabilir
-// simdilik burada
+const app = express();
+
+// ============================================================
+// 1. STATİK DOSYA AYARI (EN ÜSTTE OLMALI)
+// ============================================================
+// Debug logunda çalıştığını kanıtladığımız "process.cwd()" mantığını kullanıyoruz.
+const uploadsPath = path.join(process.cwd(), 'uploads');
+
+console.log("------------------------------------------------");
+console.log("📂 Static Dosya Yolu Ayarlandı:", uploadsPath);
+console.log("------------------------------------------------");
+
+// Express'e: "/uploads" isteği gelirse, bu klasöre bak diyoruz.
+app.use('/uploads', express.static(uploadsPath));
+
+// ============================================================
+// 2. DEBUG ENDPOINT (Test için kalabilir)
+// ============================================================
+app.get('/test-image/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(uploadsPath, filename); // Yukarıdaki doğru yolu kullanır
+
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send(`Dosya bulunamadı: ${filePath}`);
+    }
+});
+
+// ============================================================
+// 3. DİĞER MIDDLEWARE'LER
+// ============================================================
+app.use(express.json()); 
+app.use(passport.initialize());
+
+// ❌ SİLİNDİ: app.use('/uploads', express.static(path.join(__dirname, './uploads')));
+// (Bu satır dist klasörüne baktığı için hataya sebep oluyordu)
+
+// Redis Hata Dinleyicisi
 redisClient.on('error', (err) => console.log('Redis Client Error', err));
 
+// ============================================================
+// 4. ROTALAR
+// ============================================================
 
-// --- ANA MANTIK ---
-
-// Basit bir test rotasi
 app.get('/', (req: Request, res: Response) => {
   res.status(200).json({ message: 'API Calisiyor!' });
 });
 
-// !!! YENİ EKLEDİĞİMİZ BÖLÜM !!!
-// Gelen tüm istekleri /api/v1 için apiRoutes'a yönlendir
 app.use('/api/v1', apiRoutes);
 
-
-// Ornek: Redis Test (Bunu silebilir veya bırakabilirsiniz) asdasd
 app.get('/redis-test', async (req: Request, res: Response) => {
   try {
     await redisClient.set('test_key', 'Merhaba Redis!');
@@ -37,6 +66,5 @@ app.get('/redis-test', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Redis hatasi' });
   }
 });
-
 
 export default app;

@@ -100,6 +100,7 @@ export const getFeed = async (req: Request, res: Response) => {
     });
 
     res.json(items);
+    console.log(items);
   } catch (error) {
     console.error("Feed Error:", error);
     res.status(500).json({ error: "Failed to load feed" });

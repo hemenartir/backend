@@ -11,6 +11,7 @@ interface AuthRequest extends Request {
 export const placeBid = async (req: Request, res: Response) => {
   // 1. Get Data
   const { itemId, amount } = req.body;
+  console.log(itemId);
   const user = (req as AuthRequest).user;
   if(!user){
       return res.status(401).json({ message: 'User not authenticated' });

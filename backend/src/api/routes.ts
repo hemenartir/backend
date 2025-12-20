@@ -23,8 +23,8 @@ router.use('/auctions', auctionsRoutes);
 // /api/v1/bids
 router.use('/bids', bidsRoutes);
 
-// /api/v1/upload
-router.use('/upload', uploadRoutes)
+// /api/v1/uploads
+router.use('/uploads', uploadRoutes)
 
 // /api/v1/watchlist
 router.use('/watchlist', watchlistRoutes)
