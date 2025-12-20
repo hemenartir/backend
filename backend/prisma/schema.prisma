@@ -96,8 +96,10 @@ model Category {
 // için de yapmanızı şiddetle tavsiye ederim.
 enum ItemStatus {
   Active
-  Ended
-  Sold
+  Ended           // Genel bitiş
+  Sold            // Ödemesi alındı, bitti
+  Unsold          // Teklif gelmedi
+  WaitingPayment  // Kazanan belli, ödeme bekleniyor
   Cancelled
 }
 

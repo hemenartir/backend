@@ -5,7 +5,15 @@ import passport from 'passport';
 import './core/config/google.strategy'; 
 import path from 'path';
 import fs from 'fs';
+declare global {
+  interface BigInt {
+    toJSON(): string | number;
+  }
+}
 
+BigInt.prototype.toJSON = function (): string {
+  return this.toString();
+};
 const app = express();
 
 // ============================================================

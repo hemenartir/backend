@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../core/middleware/authMiddleware';
-
+import {toggleWatchlist, getMyWatchlist} from './watchlist.controller';
 
 const router = Router();
-const watchlistController = require('./watchlist.controller')
 
-router.post('/watchlist/toggle', authMiddleware, watchlistController.toggleWatchlist);
-router.get('/watchlist', authMiddleware, watchlistController.getMyWatchlist);
+
+router.post('/toggle', authMiddleware, toggleWatchlist);
+router.get('/', authMiddleware, getMyWatchlist);
 
 export default router;

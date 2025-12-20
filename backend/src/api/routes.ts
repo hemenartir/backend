@@ -5,6 +5,7 @@ import auctionsRoutes from './auctions/auctions.routes';
 import bidsRoutes from './bids/bids.routes';
 import uploadRoutes from './upload/upload.routes';
 import watchlistRoutes from './watchlist/watchlist.routes';
+import notificationsRoutes from './notifications/notifications.routes';
 
 // Buraya items ve bids rotaları da gelecek
 // import itemRoutes from './items/items.routes';
@@ -29,4 +30,6 @@ router.use('/uploads', uploadRoutes)
 // /api/v1/watchlist
 router.use('/watchlist', watchlistRoutes)
 
+// /api/v1/notifications
+router.use('/notifications', notificationsRoutes)
 export default router;

@@ -60,8 +60,9 @@ export const createItem = async (req: Request, res: Response) => {
 };
 
 export const getItemDetail = async (req: Request, res: Response) => {
+  console.log("İstek Yapan User ID:", (req as any).user?.id);
   const { id } = req.params;
-  
+  const userId = (req as AuthRequest).user?.id; // Get User ID from token if exists
   const item = await prisma.item.findUnique({
     where: { id: Number(id) },
     include: {
@@ -73,14 +74,34 @@ export const getItemDetail = async (req: Request, res: Response) => {
     }
   });
 
+  // 🟢 NEW: Check if this user has this item in watchlist
+    let isWatched = false;
+    if (userId) {
+      const watchlistRecord = await prisma.watchlist.findUnique({
+        where: {
+          userId_itemId: {
+            userId: userId,
+            itemId: Number(id)
+          }
+        }
+      });
+      isWatched = !!watchlistRecord; // Convert object to boolean (true if exists)
+    }
+
   if (!item) return res.status(404).json({ error: "Item not found" });
-  res.json(item);
+  res.json({ 
+        ...item, 
+        currentPrice: item.currentPrice.toString(),
+        startingPrice: item.startingPrice.toString(),
+        isWatched // <--- Sending this to frontend
+    });
 };
 
 // ... existing imports
 
 export const getFeed = async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).user?.id; // Middleware sayesinde ID elimizde (varsa)
     // 1. Fetch items from database
     const items = await prisma.item.findMany({
       where: {
@@ -99,8 +120,30 @@ export const getFeed = async (req: Request, res: Response) => {
       }
     });
 
-    res.json(items);
-    console.log(items);
+    // 2. Eğer kullanıcı giriş yapmışsa, izleme listesini çek
+    let watchedItemIds = new Set<number>(); // Performans için Set kullanıyoruz
+    
+    if (userId) {
+      const myWatchlist = await prisma.watchlist.findMany({
+        where: { userId: userId },
+        select: { itemId: true } // Sadece ID'leri çekmek yeterli
+      });
+      // ID'leri Set içine atıyoruz: {1, 5, 8...}
+      watchedItemIds = new Set(myWatchlist.map((w: any) => w.itemId));
+    }
+
+    // 3. Her ürüne 'isWatched' bilgisini ekle
+    const itemsWithStatus = items.map((item : any) => ({
+      ...item,
+      // Decimal alanları stringe çevir (Hata almamak için)
+      currentPrice: item.currentPrice.toString(),
+      startingPrice: item.startingPrice.toString(),
+      // Kullanıcının listesinde bu item ID var mı?
+      isWatched: watchedItemIds.has(item.id) 
+    }));
+
+    res.json(itemsWithStatus);
+
   } catch (error) {
     console.error("Feed Error:", error);
     res.status(500).json({ error: "Failed to load feed" });

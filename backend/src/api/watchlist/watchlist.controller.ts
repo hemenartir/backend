@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -8,9 +8,10 @@ interface AuthRequest extends Request {
 }
 
 // Toggle: If exists, remove it. If not, add it.
-export const toggleWatchlist = async (req: AuthRequest, res: Response) => {
+export const toggleWatchlist = async (req: Request, res: Response) => {
   const { itemId } = req.body;
-  const userId = req.user?.id;
+  const user = (req as AuthRequest).user;
+  const userId = user?.id;
   
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
@@ -49,18 +50,54 @@ export const toggleWatchlist = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const getMyWatchlist = async (req: AuthRequest, res: Response) => {
-  const userId = req.user?.id;
+export const getMyWatchlist = async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user;
+  const userId = user?.id;
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const watchlist = await prisma.watchlist.findMany({
-    where: { userId: userId },
-    include: {
-      item: { // Include the actual item details
-        include: { assets: true } // Include images
+  try {
+    const watchlist = await prisma.watchlist.findMany({
+      where: { userId: userId },
+      orderBy: { addedAt: 'desc' }, // En son eklenen en üstte
+      include: {
+        item: {
+          include: {
+            assets: true, // Resimler
+            // 🟢 Kullanıcının bu ürüne yaptığı teklifleri kontrol et
+            bids: {
+                where: { userId: userId },
+                select: { id: true } // Sadece var mı yok mu diye bakacağız
+            },
+            seller: {
+                select: { username: true }
+            }
+          }
+        }
       }
-    }
-  });
+    });
 
-  res.json(watchlist);
+    // Veriyi Frontend'in anlayacağı temiz bir formata sokalım
+    const formattedList = watchlist.map((record : any) => {
+      const item = record.item;
+      const userHasBid = item.bids.length > 0; // Teklif dizisi boş değilse teklif vermiştir
+      const isWinning = item.highBidderId === userId; // En yüksek teklif bende mi?
+
+      return {
+        ...item,
+        currentPrice: item.currentPrice.toString(), // Decimal fix
+        startingPrice: item.startingPrice.toString(), // Decimal fix
+        // 🟢 Frontend için kritik flagler:
+        userHasBid: userHasBid, 
+        isWinning: isWinning,
+        // Watchlist sayfasında olduğumuz için bu kesin true
+        isWatched: true 
+      };
+    });
+
+    res.json(formattedList);
+
+  } catch (error) {
+    console.error("Watchlist Error:", error);
+    res.status(500).json({ error: "Failed to fetch watchlist" });
+  }
 };
