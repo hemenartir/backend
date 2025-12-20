@@ -129,31 +129,55 @@ export const getItemDetail = async (req: Request, res: Response) => {
 
 export const getFeed = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id; 
+    const userId = (req as any).user?.id;
     
+    // 1. URL'den hem 'search' hem 'categoryId' parametrelerini al
+    const { search, categoryId } = req.query;
+
+    // 2. Dinamik Filtre Oluşturma
+    // Varsayılan kural: Aktif olacak VE Süresi bitmemiş olacak
+    const whereClause: any = {
+      status: 'Active',
+      endTime: { gt: new Date() }
+    };
+
+    // Eğer arama kelimesi varsa, OR (veya) koşulu ekle
+    if (search) {
+      const searchString = String(search);
+      whereClause.OR = [
+        // Başlıkta ara
+        { title: { contains: searchString, mode: 'insensitive' } },
+        // Açıklamada ara
+        { description: { contains: searchString, mode: 'insensitive' } },
+        // Satıcı kullanıcı adında ara (İlişkisel filtre)
+        { seller: { username: { contains: searchString, mode: 'insensitive' } } }
+      ];
+    }
+    if (categoryId) {
+            whereClause.categoryId = Number(categoryId);
+        }
+    // 3. Veritabanı Sorgusu
     const items = await prisma.item.findMany({
-      where: {
-        status: 'Active',           
-        endTime: { gt: new Date() } 
-      },
+      where: whereClause, // Hazırladığımız filtreyi buraya veriyoruz
       orderBy: {
-        startTime: 'desc' 
+        startTime: 'desc'
       },
       include: {
         seller: {
-          select: { username: true, id: true } 
+          select: { username: true, id: true }
         },
-        assets: true, 
-        category: true 
+        assets: true,
+        category: true
       }
     });
 
-    let watchedItemIds = new Set<number>(); 
+    // 4. İzleme Listesi Kontrolü (Aynı kalıyor)
+    let watchedItemIds = new Set<number>();
     
     if (userId) {
       const myWatchlist = await prisma.watchlist.findMany({
         where: { userId: userId },
-        select: { itemId: true } 
+        select: { itemId: true }
       });
       watchedItemIds = new Set(myWatchlist.map((w: any) => w.itemId));
     }

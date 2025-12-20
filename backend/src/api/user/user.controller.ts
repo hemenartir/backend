@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../../prismaClient';
 // Düzeltme 1: Enum'u import et
-import { User as PrismaUser, AccountStatus } from '../../generated/prisma';
+import { User as PrismaUser, AccountStatus } from '@prisma/client';
 // (Not: PrismaUser tipi global olarak authMiddleware'de tanımlandığı için
 // burada ekstra bir import'a gerek kalmayabilir, ama hata alırsak ekleriz)
 
@@ -103,8 +103,14 @@ export const getMySellingItems = async (req: Request, res: Response) => {
       },
       orderBy: { startTime: 'desc' }
     });
-
-    res.json(bigIntToString(items));
+    const formattedItems = items.map(item => ({
+        ...item,
+        currentPrice: item.currentPrice.toString(),
+        startingPrice: item.startingPrice.toString(),
+        // BigInt hatası varsa onu da string yap
+        id: item.id.toString() 
+    }));
+    res.json(formattedItems);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Sattıklarım getirilemedi.' });

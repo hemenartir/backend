@@ -1,4 +1,5 @@
-import { PrismaClient } from './generated/prisma';
+//import { PrismaClient } from './generated/prisma';
+import { PrismaClient } from '@prisma/client';
 
 // Prisma Client'ın tek bir global örneğini oluştur
 // ve bunu dışa aktar.
