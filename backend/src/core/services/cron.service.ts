@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { PrismaClient, ItemStatus } from '@prisma/client';
-import {SocketService} from '../socket/socket.service';
+import { SocketService } from '../socket/socket.service'; // Path'i kontrol et
 
 const prisma = new PrismaClient();
 
@@ -28,16 +28,13 @@ export const startAuctionCheckCron = () => {
 const checkAndEndAuctions = async () => {
   const now = new Date();
 
-  // title alanını da çekiyoruz ki bildirim mesajında ürün adını yazabilelim.
   const endedItems = await prisma.item.findMany({
     where: {
       endTime: { lte: now },
       status: ItemStatus.Active,
     },
     include: {
-        // Eğer ürünün sahibine de "Ürününüz satıldı" bildirimi atacaksanız 
-        // buraya seller: true eklemeniz gerekebilir.
-        seller: true,
+        seller: true, // Satıcı bilgilerine (ID'sine) ihtiyacımız var
     } 
   });
 
@@ -49,55 +46,77 @@ const checkAndEndAuctions = async () => {
     try {
       await prisma.$transaction(async (tx : any) => {
         
+        // -------------------------------------------------------
         // SENARYO A: Kazanan Var (AuctionWon)
+        // -------------------------------------------------------
         if (item.highBidderId) {
             // 1. Ürünü güncelle
             const updateResult = await tx.item.updateMany({
-                where: { 
-                    id: item.id, 
-                    status: ItemStatus.Active 
-                },
+                where: { id: item.id, status: ItemStatus.Active },
                 data: { status: ItemStatus.WaitingPayment }
             });
 
-            // Eğer güncelleme başarılıysa (yani ürün hala aktiftiyse ve kilitlendiyse)
             if (updateResult.count > 0) {
-                // 2. Bildirim Oluştur (AuctionWon)
-                const newNotification = await tx.notification.create({
+                
+                // --- BİLDİRİM 1: ALICIYA (KAZANAN) ---
+                const buyerNotif = await tx.notification.create({
                     data: {
-                        userId: item.highBidderId, // Kazanan kullanıcı
+                        userId: item.highBidderId,
                         itemId: item.id,
                         type: 'AuctionWon',
-                        message: `Tebrikler! "${item.title}" ürününü ${item.currentPrice} TL teklif ile kazandınız. Ödemenizi tamamlamak için tıklayın.`,
+                        message: `Tebrikler! "${item.title}" ürününü ${item.currentPrice} TL ile kazandınız. Ödeme yapın.`,
+                        isRead: false
+                    }
+                });
+                
+                // --- BİLDİRİM 2: SATICIYA (ÜRÜNÜNÜZ SATILDI) ---
+                // Satıcı da ürününün gittiğini bilmeli
+                const sellerNotif = await tx.notification.create({
+                    data: {
+                        userId: item.sellerId, // Satıcının ID'si
+                        itemId: item.id,
+                        type: 'ItemSold', // Yeni bir tip kullanabilirsin
+                        message: `Müjde! "${item.title}" ürününüz ${item.currentPrice} TL'ye satıldı. Ödeme bekleniyor.`,
                         isRead: false
                     }
                 });
 
-                console.log(`✅ Ürün #${item.id} satıldı ve User #${item.highBidderId} için bildirim oluşturuldu.`);
+                console.log(`✅ Ürün #${item.id} satıldı. Alıcı ve Satıcı bilgilendirildi.`);
 
-                // --- SOCKET ILE CANLI BILDIRIM GONDER ---
-                // Transaction dışına çıkmasını beklemeye gerek yok, asenkron atabiliriz.
-                // Ancak veritabanına yazıldığından emin olduğumuz noktadayız.
-                SocketService.sendNotification(item.highBidderId, {
-                    id: newNotification.id,
-                    type: newNotification.type,
-                    message: newNotification.message,
-                    itemId: newNotification.itemId,
-                    isRead: newNotification.isRead,
-                    createdAt: newNotification.createdAt
-                });
+                // --- SOCKET GÖNDERİMLERİ ---
+                SocketService.sendNotification(item.highBidderId, buyerNotif);
+                SocketService.sendNotification(item.sellerId, sellerNotif);
+                SocketService.getIO().emit('auction_ended', { itemId: item.id });
             }
         } 
+        
+        // -------------------------------------------------------
         // SENARYO B: Kazanan Yok (Unsold)
+        // -------------------------------------------------------
         else {
-            await tx.item.updateMany({
-                where: { 
-                    id: item.id, 
-                    status: ItemStatus.Active 
-                },
+            const updateResult = await tx.item.updateMany({
+                where: { id: item.id, status: ItemStatus.Active },
                 data: { status: ItemStatus.Unsold }
             });
-            console.log(`⛔ Ürün #${item.id} satılmadı.`);
+
+            if (updateResult.count > 0) {
+                // --- BİLDİRİM: SATICIYA (SATILAMADI) ---
+                const unsoldNotif = await tx.notification.create({
+                    data: {
+                        userId: item.sellerId, // Satıcı
+                        itemId: item.id,
+                        type: 'AuctionFailed', // veya 'Unsold'
+                        message: `Süre doldu: "${item.title}" ürününüz maalesef teklif almadı ve kapandı.`,
+                        isRead: false
+                    }
+                });
+
+                console.log(`⛔ Ürün #${item.id} satılmadı. Satıcı bilgilendirildi.`);
+
+                // --- SOCKET GÖNDERİMİ ---
+                SocketService.sendNotification(item.sellerId, unsoldNotif);
+                SocketService.getIO().emit('auction_ended', { itemId: item.id });
+            }
         }
       });
 

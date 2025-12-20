@@ -28,6 +28,9 @@ interface ServerToClientEvents {
     isRead: boolean;
     createdAt: Date;
   }) => void;
+
+  new_item_listed: (item: any) => void;
+  auction_ended: (data: { itemId: number }) => void;
 }
 
 // Socket verisi (socket.data içinde tutulacaklar)

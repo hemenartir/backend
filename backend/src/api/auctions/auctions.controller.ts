@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { SocketService } from '../../core/socket/socket.service';
 
 const prisma = new PrismaClient();
 
@@ -17,29 +18,26 @@ export const createItem = async (req: Request, res: Response) => {
     categoryId,
     assets
   } = req.body;
+  
   const user = (req as AuthRequest).user;
-  // 2. Fail fast if user is missing (Runtime safety)
+  
   if (!user) {
     return res.status(401).json({ message: 'User not authenticated' });
   }
   const userId = user.id;
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   try {
     const newItem = await prisma.item.create({
       data: {
         title,
         description,
-        startingPrice: Number(startingPrice), // Ensure number
+        startingPrice: Number(startingPrice),
         currentPrice: Number(startingPrice),
         startTime: new Date(startTime),
         endTime: new Date(endTime),
         status: 'Active',
         sellerId: userId,
         categoryId: Number(categoryId),
-        
-        // --- NEW LOGIC ---
-        // 'assets' should be an array like: [{ url: '...', type: 'Image' }]
         assets: {
           create: assets.map((asset: { url: string, type: string }) => ({
              assetURL: asset.url,
@@ -47,34 +45,65 @@ export const createItem = async (req: Request, res: Response) => {
           }))
         }
       },
+      // 🟢 DÜZELTME BURADA YAPILDI
       include: {
-        assets: true // Return the created assets in the response
+        assets: true, 
+        seller: { // Frontend'in kartı çizebilmesi için satıcı bilgisi ŞART
+          select: { username: true, id: true }
+        },
+        category: true // Kategori rengi/ikonu için gerekebilir
       }
     });
 
-    res.status(201).json(newItem);
+    // Decimal alanları string'e çevirerek göndermek daha güvenlidir (GetFeed ile uyumlu olsun diye)
+    const formattedItem = {
+        ...newItem,
+        currentPrice: newItem.currentPrice.toString(),
+        startingPrice: newItem.startingPrice.toString(),
+    };
+
+    // 1. Satıcıya Bildirim (DB Kaydı)
+    const notification = await prisma.notification.create({
+      data: {
+        userId: userId,
+        itemId: newItem.id,
+        type: 'System',
+        message: `Ürününüz "${newItem.title}" başarıyla yayınlandı!`,
+        isRead: false
+      }
+    });
+
+    // 2. Satıcıya Anlık Bildirim (Socket)
+    SocketService.sendNotification(userId, notification);
+
+    // 3. Ana Sayfaya "Yeni Ürün" Sinyali (formattedItem gönderiyoruz ki frontend seller'ı görsün)
+    SocketService.getIO().emit('new_item_listed', formattedItem);
+
+    res.status(201).json(formattedItem);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to create item" });
   }
 };
 
+// --- Diğer fonksiyonlar aynı kalabilir ---
+
 export const getItemDetail = async (req: Request, res: Response) => {
-  console.log("İstek Yapan User ID:", (req as any).user?.id);
+  // console.log("İstek Yapan User ID:", (req as any).user?.id);
   const { id } = req.params;
-  const userId = (req as AuthRequest).user?.id; // Get User ID from token if exists
+  const userId = (req as AuthRequest).user?.id; 
+  
   const item = await prisma.item.findUnique({
     where: { id: Number(id) },
     include: {
       seller: {
-        select: { username: true, id: true } // Only return safe data
+        select: { username: true, id: true } 
       },
-      assets: true, // Images
+      assets: true, 
       category: true
     }
   });
 
-  // 🟢 NEW: Check if this user has this item in watchlist
     let isWatched = false;
     if (userId) {
       const watchlistRecord = await prisma.watchlist.findUnique({
@@ -85,60 +114,54 @@ export const getItemDetail = async (req: Request, res: Response) => {
           }
         }
       });
-      isWatched = !!watchlistRecord; // Convert object to boolean (true if exists)
+      isWatched = !!watchlistRecord; 
     }
 
   if (!item) return res.status(404).json({ error: "Item not found" });
+  
   res.json({ 
         ...item, 
         currentPrice: item.currentPrice.toString(),
         startingPrice: item.startingPrice.toString(),
-        isWatched // <--- Sending this to frontend
+        isWatched 
     });
 };
 
-// ... existing imports
-
 export const getFeed = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id; // Middleware sayesinde ID elimizde (varsa)
-    // 1. Fetch items from database
+    const userId = (req as any).user?.id; 
+    
     const items = await prisma.item.findMany({
       where: {
-        status: 'Active',           // Only show active auctions
-        endTime: { gt: new Date() } // Ensure auction hasn't ended yet
+        status: 'Active',           
+        endTime: { gt: new Date() } 
       },
       orderBy: {
-        startTime: 'desc' // Show newest items first
+        startTime: 'desc' 
       },
       include: {
         seller: {
-          select: { username: true, id: true } // Show who is selling it
+          select: { username: true, id: true } 
         },
-        assets: true, // Get images
-        category: true // Get category info
+        assets: true, 
+        category: true 
       }
     });
 
-    // 2. Eğer kullanıcı giriş yapmışsa, izleme listesini çek
-    let watchedItemIds = new Set<number>(); // Performans için Set kullanıyoruz
+    let watchedItemIds = new Set<number>(); 
     
     if (userId) {
       const myWatchlist = await prisma.watchlist.findMany({
         where: { userId: userId },
-        select: { itemId: true } // Sadece ID'leri çekmek yeterli
+        select: { itemId: true } 
       });
-      // ID'leri Set içine atıyoruz: {1, 5, 8...}
       watchedItemIds = new Set(myWatchlist.map((w: any) => w.itemId));
     }
 
-    // 3. Her ürüne 'isWatched' bilgisini ekle
     const itemsWithStatus = items.map((item : any) => ({
       ...item,
-      // Decimal alanları stringe çevir (Hata almamak için)
       currentPrice: item.currentPrice.toString(),
       startingPrice: item.startingPrice.toString(),
-      // Kullanıcının listesinde bu item ID var mı?
       isWatched: watchedItemIds.has(item.id) 
     }));
 
